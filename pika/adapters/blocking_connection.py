@@ -926,7 +926,6 @@ class BlockingChannel(channel.Channel):
         else:
             for consumer_tag in self._consumers.keys():
                 self.basic_cancel(consumer_tag)
-        self.wait = True
 
     def tx_commit(self):
         """Commit a transaction."""
@@ -1116,7 +1115,6 @@ class BlockingChannel(channel.Channel):
         :param bool wait: Wait for a response
 
         """
-        self.wait = wait
         self._received_response = False
         self.connection.send_method(self.channel_number, method_frame, content)
         while wait and not self._received_response:
