@@ -2,15 +2,14 @@
 import struct
 import decimal
 import calendar
-import sys
 from datetime import datetime
 
 from pika import exceptions
 
-if sys.version_info.major < 3:
-    class binary(str): pass
-else:
+if hasattr(__builtins__, 'bytes') and bytes is not str:
     binary = bytes
+else:
+    class binary(str): pass
 
 def encode_table(pieces, table):
     """Encode a dict as an AMQP table appending the encded table to the
