@@ -6,6 +6,10 @@ from datetime import datetime
 
 from pika import exceptions
 
+if hasattr(__builtins__, 'bytes') and bytes is not str:
+    binary = bytes
+else:
+    class binary(str): pass
 
 def encode_table(pieces, table):
     """Encode a dict as an AMQP table appending the encded table to the
@@ -41,7 +45,11 @@ def encode_value(pieces, value):
     :rtype: int
 
     """
-    if isinstance(value, basestring):
+    if isinstance(value, binary):
+        pieces.append(struct.pack('>cI', 'x', len(value)))
+        pieces.append(value)
+        return 5 + len(value)
+    elif isinstance(value, basestring):
         if isinstance(value, unicode):
             value = value.encode('utf-8')
         pieces.append(struct.pack('>cI', 'S', len(value)))
@@ -208,6 +216,13 @@ def decode_value(encoded, offset):
             value = str(value)
         except UnicodeEncodeError:
             pass
+        offset += length
+
+    # Binary
+    elif kind == 'x':
+        length = struct.unpack_from('>I', encoded, offset)[0]
+        offset += 4
+        value = binary(encoded[offset: offset + length])
         offset += length
 
     # Field Array

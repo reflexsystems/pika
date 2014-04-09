@@ -960,7 +960,6 @@ class BlockingChannel(channel.Channel):
         else:
             for consumer_tag in self._consumers.keys():
                 self.basic_cancel(consumer_tag)
-        self.wait = True
 
     def tx_commit(self):
         """Commit a transaction."""
