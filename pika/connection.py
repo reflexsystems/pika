@@ -1,12 +1,17 @@
 """Core connection objects"""
 import ast
+import sys
 import collections
 import logging
 import math
 import platform
 import urllib
-import urlparse
 import warnings
+
+if sys.version_info > (3,):
+    import urllib.parse as urlparse
+else:
+    import urlparse
 
 from pika import __version__
 from pika import callback
@@ -456,8 +461,10 @@ class URLParameters(Parameters):
                     self.ssl else self.DEFAULT_PORT
         elif self._validate_port(parts.port):
             self.port = parts.port
-        self.credentials = pika_credentials.PlainCredentials(parts.username,
-                                                             parts.password)
+
+        if parts.username is not None:
+            self.credentials = pika_credentials.PlainCredentials(parts.username,
+                                                                 parts.password)
 
         # Get the Virtual Host
         if len(parts.path) <= 1:
@@ -646,7 +653,7 @@ class Connection(object):
         """
         raise NotImplementedError
 
-    def channel(self, on_open_callback, channel_number=None, force_binary=False):
+    def channel(self, on_open_callback, channel_number=None):
         """Create a new channel with the next available channel number or pass
         in a channel number to use. Must be non-zero if you would like to
         specify but it is recommended that you let Pika manage the channel
@@ -655,15 +662,13 @@ class Connection(object):
         :param method on_open_callback: The callback when the channel is opened
         :param int channel_number: The channel number to use, defaults to the
                                    next available.
-        :param bool force_binary: Prevents channel from autodetecting unicode
         :rtype: pika.channel.Channel
 
         """
         if not channel_number:
             channel_number = self._next_channel_number()
         self._channels[channel_number] = self._create_channel(channel_number,
-                                                              on_open_callback,
-                                                              force_binary)
+                                                              on_open_callback)
         self._add_channel_callbacks(channel_number)
         self._channels[channel_number].open()
         return self._channels[channel_number]
@@ -932,16 +937,15 @@ class Connection(object):
         warnings.warn('This method is deprecated, use Connection.connect',
                       DeprecationWarning)
 
-    def _create_channel(self, channel_number, on_open_callback, force_binary):
+    def _create_channel(self, channel_number, on_open_callback):
         """Create a new channel using the specified channel number and calling
         back the method specified by on_open_callback
 
         :param int channel_number: The channel number to use
         :param method on_open_callback: The callback when the channel is opened
-        :param bool force_binary: Prevents channel from autodetecting unicode
 
         """
-        return channel.Channel(self, channel_number, on_open_callback, force_binary)
+        return channel.Channel(self, channel_number, on_open_callback)
 
     def _create_heartbeat_checker(self):
         """Create a heartbeat checker instance if there is a heartbeat interval

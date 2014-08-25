@@ -29,13 +29,12 @@ class Channel(object):
     OPEN = 2
     CLOSING = 3
 
-    def __init__(self, connection, channel_number, on_open_callback=None, force_binary=False):
+    def __init__(self, connection, channel_number, on_open_callback=None):
         """Create a new instance of the Channel
 
         :param pika.connection.Connection connection: The connection
         :param int channel_number: The channel number for this instance
         :param method on_open_callback: The method to call on channel open
-        :param bool force_binary: Prevents channel from autodetecting unicode
 
         """
         if not isinstance(channel_number, int):
@@ -45,7 +44,7 @@ class Channel(object):
         self.connection = connection
 
         # The frame-handler changes depending on the type of frame processed
-        self.frame_dispatcher = ContentFrameDispatcher(force_binary)
+        self.frame_dispatcher = ContentFrameDispatcher()
 
         self._blocked = collections.deque(list())
         self._blocking = None
@@ -282,7 +281,7 @@ class Channel(object):
         :type routing_key: str or unicode
         :param body: The message body
         :type body: str or unicode
-        :param pika.spec.Properties properties: Basic.properties
+        :param pika.spec.BasicProperties properties: Basic.properties
         :param bool mandatory: The mandatory flag
         :param bool immediate: The immediate flag
 
@@ -853,7 +852,6 @@ class Channel(object):
         :param pika.frame.Method method_frame: The CloseOk frame
 
         """
-        LOGGER.warning('Received %s', method_frame.method)
         self._set_state(self.CLOSED)
         self.callbacks.process(self.channel_number,
                                '_on_channel_close',
@@ -872,11 +870,11 @@ class Channel(object):
         :type body: str or unicode
 
         """
-        LOGGER.debug('Called with %r, %r, %r', method_frame, header_frame, body)
         consumer_tag = method_frame.method.consumer_tag
         if consumer_tag in self._cancelled:
-            LOGGER.debug('Rejected message for cancelled consumer')
-            return self.basic_reject(method_frame.method.delivery_tag)
+            if self.is_open:
+                self.basic_reject(method_frame.method.delivery_tag)
+            return
         if consumer_tag not in self._consumers:
             return self._add_pending_msg(consumer_tag, method_frame,
                                          header_frame, body)
@@ -1087,7 +1085,7 @@ class ContentFrameDispatcher(object):
     back in three parts upon receipt.
 
     """
-    def __init__(self, force_binary):
+    def __init__(self):
         """Create a new instance of the Dispatcher passing in the callback
         manager.
 
@@ -1096,7 +1094,6 @@ class ContentFrameDispatcher(object):
         self._header_frame = None
         self._seen_so_far = 0
         self._body_fragments = list()
-        self.force_binary = force_binary
 
     def process(self, frame_value):
         """Invoked by the Channel object when passed frames that are not
@@ -1121,25 +1118,12 @@ class ContentFrameDispatcher(object):
     def _finish(self):
         """Invoked when all of the message has been received
 
-        :rtype: tuple(pika.frame.Method, pika.frame.Header, str|unicode)
+        :rtype: tuple(pika.frame.Method, pika.frame.Header, str)
 
         """
-        value = None
-        if self.force_binary:
-            value = ''.join(self._body_fragments)
-        else:
-            try:
-                value = ''.join(self._body_fragments).decode('utf-8')
-                try:
-                    value = str(value)
-                except UnicodeEncodeError:
-                    pass
-            except UnicodeDecodeError:
-                value = ''.join(self._body_fragments)
-
         content = (self._method_frame,
                    self._header_frame,
-                   value)
+                   ''.join(self._body_fragments))
         self._reset()
         return content
 
@@ -1149,7 +1133,7 @@ class ContentFrameDispatcher(object):
 
         :param Body body_frame: The body frame
         :raises: pika.exceptions.BodyTooLongError
-        :rtype: tuple(pika.frame.Method, pika.frame.Header, str|unicode)|None
+        :rtype: tuple(pika.frame.Method, pika.frame.Header, str)|None
 
         """
         self._seen_so_far += len(body_frame.fragment)
