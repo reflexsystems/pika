@@ -355,7 +355,12 @@ class BaseConnection(connection.Connection):
         """Handle any outbound buffer writes that need to take place."""
         bytes_written = 0
         if self.outbound_buffer:
-            frame = self.outbound_buffer.popleft()
+            try:
+                frame = self.outbound_buffer.popleft()
+            except IndexError:
+                # Ignore, it's a race, I think.
+                return 0
+
             try:
                 self.socket.sendall(frame)
                 bytes_written = len(frame)
